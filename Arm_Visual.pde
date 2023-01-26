@@ -23,9 +23,9 @@ ArmState start = fromDegrees(0, 0);
 ArmState a1 = fromDegrees(50, 60);
 ArmState a2 = fromDegrees(40, 60);
 ArmState end = fromDegrees(70, -20);
-Trajectory traj = new Trajectory(start, a1, a2, end);
+Trajectory traj;
 boolean showTraj = false;
-double T = 5.0; // Total time seconds of trajectory
+double T = 10.0; // Total time seconds of trajectory
 long startTime = System.currentTimeMillis();
 ////////////////////////////
 void setup(){
@@ -37,6 +37,7 @@ void setup(){
   widthRadians = displayWidth * PIXEL_TO_RAD;
   center = new Point(widthMeters / 2, heightMeters/2);
   origin = new ArmState(0.0, heightRadians/2);
+  traj = new Trajectory(start, a1, a2, end);
 }
 ////////////////
 public void drawRobot() {
@@ -149,9 +150,9 @@ void draw() {
   if (showTraj) {
     traj.drawZone();
     traj.show();
-    traj.sample(t, T, true);
+    traj.s(t % traj.len).show(13.0, green + blue);
   }
-  arm.currentState = traj.sample(t, T, false);
+  arm.currentState = traj.s(t % traj.len);
 }
 
 // UNDER THIS IS FOR THE TRAJ EDITOR
@@ -161,25 +162,56 @@ class Trajectory {
    ArmState a1;
    ArmState a2;
    ArmState end;
-   
+   double len;
    public Trajectory (ArmState start, ArmState a1, ArmState a2, ArmState end) {
      this.start = start;
      this.a1 = a1;
      this.a2 = a2;
      this.end = end;
+     len = estimateLength(1000);
    }
    
-   public ArmState sample(double t, double T, boolean show) {
-     ArmState p = P(start, a1, a2, end, (t/T) % 1.0);
+   
+   public ArmState sample(double t, boolean show) {
+     t = Math.max(0.0, Math.min(1.0, t));
+     ArmState p = P(start, a1, a2, end, t);
      if (show) p.show(3.0, blue);
      return p;
    }
    
+   public double estimateLength(double samples) {
+     double dt = 1.0 / samples;
+     double len = 0.0;
+     ArmState prevState = P(start, a1, a2, end, 0.0);
+     // integrate
+     for (double t = dt; t <= 1.0; t += dt) {
+         ArmState currState = P(start, a1, a2, end, t);
+         len += currState.minus(prevState).mag();
+         prevState = currState;
+     }
+     
+     return len;
+   }
+   
+   public ArmState s(double l) {
+    double dt = 0.0001;
+    double distance = 0.0;
+    for (double t = 0; t < 1.0; t += dt) {
+      ArmState currState = P(start, a1, a2, end, t);
+      ArmState nextState = P(start, a1, a2, end, t + dt);
+      distance += currState.minus(nextState).mag();
+      if (distance >= l) {
+        return nextState.minus(currState).times((distance - l) / dt).plus(currState);
+      }
+    } 
+    return P(start, a1, a2, end, 1.0);
+}
+   
    public void show() {
-      double dt = .001;
-      for (double t = 0.0; t <= 1.0; t += dt) {
-        ArmState pt = sample(t, 1.0, false);
-        pt.show(1.0); // draw the curve
+      double ds = .07;
+      for (double l = 0.0; l <= len; l += ds) {
+        ArmState pt = s(l);
+        pt.show(4.0); // draw the point
       }
       start.lineTo(a1);
       end.lineTo(a2);
@@ -195,7 +227,7 @@ class Trajectory {
       p1 = p1.minus(p0).asPixel();
       p0 = p0.asPixel();
       stroke(red);
-      fill(color(100, 100, 100));
+      fill(color(0, 0, 0));
       rect(p0.q1, p0.q2, p1.q1, p1.q2);
       noStroke();
       noFill();
@@ -203,9 +235,9 @@ class Trajectory {
 }
 
 public ArmState P(ArmState start, ArmState a1, ArmState a2, ArmState end, double t) { // bel
-  ArmState first = start.times(-(t * t * t) + 3 * t * t - 3 * t + 1);
-  ArmState second = a1.times(3 * t * t * t - 6 * t * t + 3 * t);
-  ArmState third = a2.times(-3 * t * t * t + 3 * t * t);
+  ArmState first = start.times(Math.pow((1-t), 3));
+  ArmState second = a1.times(3 * Math.pow((1-t), 2) * t);
+  ArmState third = a2.times(3 * (1-t) * t * t);
   ArmState fourth = end.times(t * t * t);
   return first.plus(second).plus(third).plus(fourth);
 }
@@ -305,8 +337,9 @@ void keyPressed() {
     if (keyCode == 'D'){
       traj.end = new ArmState(mouseX, mouseY).asPoint();
     }
-    if (keyCode == 'P'){
-      startTime = System.currentTimeMillis();
-    }
   }
+  if (keyCode == 'P'){
+      startTime = System.currentTimeMillis();
+  }
+  traj.len = traj.estimateLength(1000);
 }
