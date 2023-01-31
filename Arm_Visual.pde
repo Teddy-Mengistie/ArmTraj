@@ -14,6 +14,7 @@ final int TEAM_NUMBER = 449;
 final double L1 = .5;
 final double L2 = .4;
 Arm arm = new Arm(L1, L2);
+Point armBase = new Point(0.0, 0.0);
 
 //////////////////////////// Colors
 int red = color(255, 0, 0);
@@ -31,6 +32,7 @@ Trajectory traj;
 boolean showTraj = false;
 double T = 5.0; // Total time seconds of trajectory
 long startTime = System.currentTimeMillis();
+long prevTime = System.currentTimeMillis();
 // CONSTRAINTS
 double maxq1dot = PI/3; // rad/s
 double maxq2dot =  PI/3; // rad/s
@@ -165,6 +167,7 @@ int index = 0;
 void draw() {
   long currentTime = System.currentTimeMillis();
   double t = (currentTime - startTime) / 1000.0;
+  double dt = (currentTime - prevTime) / 1000.0;
   background(0);
   drawRobot();
   if (showTraj) {
@@ -173,7 +176,10 @@ void draw() {
     path.show();
   }
   arm.show();
-  arm.currentState = traj.sample(t % traj.totalTimeSeconds);
+  var sample = traj.sample(t % traj.totalTimeSeconds);
+  var dv = new ArmState(sample.q1dot, sample.q2dot).times(dt);
+  arm.currentState = sample.plus(dv);
+  prevTime = currentTime;
 }
 
 // UNDER THIS IS FOR THE TRAJ EDITOR AND GENERATOR
@@ -219,31 +225,31 @@ class Path {
   /**
    * @param ds the space between each point along the path to be satisfied
    */
-  public List<ArmState> collectSamples(double ds) {
-    double dt = 0.0001;
+  public List<ArmState> collectSamples(int n) {
+    double dt = 1.0/n;
     double distance = 0.0;
-    double len = 0.0;
     List<ArmState> result = new ArrayList<>();
+    ArmState prevState = sample(0.0);
     for (double t = 0; t <= 1.0; t += dt) {
       ArmState currState = sample(t);
-      ArmState nextState = sample(t + dt);
-      var diff = currState.minus(nextState);
+      var diff = currState.minus(prevState);
       distance += diff.mag();
-      while (distance >= len) {
-        ArmState pt = nextState.minus(currState).times((distance - len) / dt).plus(currState);
-        pt.s = len;
-        pt.v_theta = diff.times(1/dt).getAngle();
-        result.add(pt);
-        len += ds; // move on to the next length
-      }
+      currState.s = distance;
+      currState.v_theta = diff.getAngle();
+      result.add(currState); // move on to the next length
+      prevState = currState;
     }
     return result;
   }
   
   public void showPath() {
-    for (double t = 0.0; t <= 1.0; t += .01) {
-      sample(t).show(2);
+    sample(0.0).show(6, green);
+    for (double t = .02; t < 1.0; t += .02) {
+      ArmState pt = sample(t);
+      pt.show(3);
+      arm.showEndEffector(pt, color(255, 255, 255));
     }
+    sample(1.0).show(6, red);
   }
   
   public void show() {
@@ -289,7 +295,7 @@ class Trajectory {
   }
   // O(n) n = number of points sampled
   public void parametrizeTrajectory() {
-    points = path.collectSamples(.002); // collect samples that are spaced out .0001 radians
+    points = path.collectSamples(1000); // collect 1000 samples from path to use for generating trajectory
     
     double maxV = Math.sqrt(maxq1dot * maxq1dot + maxq2dot * maxq2dot);
     double maxA = (maxq2dot * maxq2ddot + maxq2dot * maxq2ddot) / maxV;
@@ -359,7 +365,7 @@ class Trajectory {
         states.setJSONObject(i, currState);
       }
       
-      saveJSONArray(states, "first_ever_traj.json");
+      saveJSONArray(states, "traj.json");
   }
   public void show() {
     for (ArmState pt : points) {
@@ -486,7 +492,7 @@ void keyPressed() {
     }
   }  
   
-  // P - replay animation
+  // P - play animation
   if (keyCode == 'P') {
     startTime = System.currentTimeMillis();
   }
