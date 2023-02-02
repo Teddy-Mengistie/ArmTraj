@@ -319,13 +319,13 @@ class Trajectory {
       double curvature = dtheta / ds;
       double sa = Math.abs(Math.sin(currPt.v_theta));
       double ca = Math.abs(Math.cos(currPt.v_theta));
-      if ((currPt.v * currPt.v * curvature * ca) > maxq1ddot) {
+      if ((currPt.v * currPt.v * curvature * sa) > maxq1ddot) {
         currPt.step = 1;
-        currPt.v = Math.min(currPt.v, Math.sqrt(maxq1ddot / ca / curvature));
+        currPt.v = Math.min(currPt.v, Math.sqrt(maxq1ddot / sa / curvature));
       }
-      if ((currPt.v * currPt.v * curvature * sa) > maxq2ddot) {
+      if ((currPt.v * currPt.v * curvature * ca) > maxq2ddot) {
         currPt.step = 1;
-        currPt.v = Math.min(currPt.v, Math.sqrt(maxq2ddot / sa / curvature));
+        currPt.v = Math.min(currPt.v, Math.sqrt(maxq2ddot / ca / curvature));
       }
     }
     // Step 2: Forward pass, start with v as 0.0
