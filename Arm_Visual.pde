@@ -309,6 +309,24 @@ class Trajectory {
       point.step = 0;
     }
     
+    // Step 2: Apply curvature constraints,
+    // Allows the arm to slow down on tight changes in direction of v
+    for (int i = 1; i < n; i++) {
+      ArmState currPt = points.get(i);
+      ArmState prevPt = points.get(i-1);
+      double ds = Math.abs(currPt.s - prevPt.s);
+      double dtheta = currPt.v_theta - prevPt.v_theta;
+      double curvature = dtheta / ds;
+      double sa = Math.abs(Math.sin(currPt.v_theta));
+      if ((currPt.v * currPt.v * curvature * sa) > maxq1ddot) {
+        currPt.step = 1;
+        currPt.v = Math.min(currPt.v, Math.sqrt(maxq1ddot / sa / curvature));
+      }
+      if ((currPt.v * currPt.v * curvature * sa) > maxq2ddot) {
+        currPt.step = 1;
+        currPt.v = Math.min(currPt.v, Math.sqrt(maxq2ddot / sa / curvature));
+      }
+    }
     // Step 2: Forward pass, start with v as 0.0
     // Use equation vf = sqrt(v0^2 + 2ad)
     points.get(0).v = 0.0; // start at v = 0
@@ -316,19 +334,12 @@ class Trajectory {
       ArmState currPt = points.get(i);
       ArmState prevPt = points.get(i-1);
       double ds = Math.abs(currPt.s - prevPt.s);
-      double dtheta = currPt.v_theta - prevPt.v_theta;
-      double curvature = dtheta / ds;
-      double q1dot = (Math.cos(currPt.v_theta));
-      double q2dot = (Math.sin(currPt.v_theta));
+      double q1dot = Math.abs((Math.cos(currPt.v_theta)));
+      double q2dot = Math.abs((Math.sin(currPt.v_theta)));
       double maxA = (q1dot * maxq1ddot + q2dot * maxq2ddot);
-      double sa = Math.abs(Math.sin(currPt.v_theta));
       double vi = prevPt.v;
-      if (Math.sqrt(vi * vi + 2.0 * maxA * ds) <= currPt.v) currPt.step = 1;
+      if (Math.sqrt(vi * vi + 2.0 * maxA * ds) <= currPt.v) currPt.step = 2;
       double vf = Math.min(currPt.v, Math.sqrt(vi * vi + 2.0 * maxA * ds));
-      if ((currPt.v * currPt.v * curvature * sa) > maxq1ddot || (currPt.v * currPt.v * curvature * sa) > maxq2ddot) {
-        currPt.step = 3;
-        vf = Math.min(vf, Math.sqrt(maxq1ddot / sa / curvature));
-      }
       currPt.v = vf;
     }
     
@@ -339,22 +350,12 @@ class Trajectory {
       ArmState currPt = points.get(i);
       ArmState prevPt = points.get(i+1);
       double ds = Math.abs(currPt.s - prevPt.s);
-      double dtheta = currPt.v_theta - prevPt.v_theta;
-      double curvature = dtheta / ds;
-      double q1dot = (Math.cos(currPt.v_theta));
-      double q2dot = (Math.sin(currPt.v_theta));
+      double q1dot = Math.abs((Math.cos(currPt.v_theta)));
+      double q2dot = Math.abs((Math.sin(currPt.v_theta)));
       double maxA = (q1dot * maxq1ddot + q2dot * maxq2ddot);
-      double sa = Math.abs(Math.sin(currPt.v_theta));
       double vi = prevPt.v;
-      if (Math.sqrt(vi * vi + 2.0 * maxA * ds) <= currPt.v) currPt.step = 2;
-      
+      if (Math.sqrt(vi * vi + 2.0 * maxA * ds) <= currPt.v) currPt.step = 3;
       double vf = Math.min(currPt.v, Math.sqrt(vi * vi + 2.0 * maxA * ds));
-      
-      // add curvature constraint to prevent extreme corner turns
-      if ((currPt.v * currPt.v * curvature * sa) > maxq1ddot || (currPt.v * currPt.v * curvature * sa) > maxq2ddot) {
-        currPt.step = 3;
-        vf = Math.min(vf, Math.sqrt(maxq1ddot / sa / curvature));
-      }
       currPt.v = vf;
       currPt.q1dot = (float)(currPt.v * Math.cos(currPt.v_theta));
       currPt.q2dot = (float)(currPt.v * Math.sin(currPt.v_theta));
@@ -400,13 +401,13 @@ class Trajectory {
           pt.show((float)pt.v + .2);
         break;
         case 1:
-          pt.show((float)pt.v + .2, color(0, 0, 255));
+          pt.show((float)pt.v + .2, color(#FFEB08));
         break;
         case 2:
-          pt.show((float)pt.v + .2, color(255, 0, 0));
+          pt.show((float)pt.v + .2, blue);
         break;
         case 3:
-          pt.show((float)pt.v + .2, color(#FFEB08));
+          pt.show((float)pt.v + .2, red);
         break;
         default: 
           pt.show((float)pt.v + .2, color(0, 255, 0));
