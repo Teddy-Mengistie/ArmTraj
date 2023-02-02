@@ -33,10 +33,10 @@ boolean showTraj = false;
 long startTime = System.currentTimeMillis();
 long prevTime = System.currentTimeMillis();
 // CONSTRAINTS
-double maxq1dot = .2; // rad/s
-double maxq2dot = .2; // rad/s
-double maxq1ddot = 3.1; // rad/s/s
-double maxq2ddot = 3.1; // rad/s/s
+double maxq1dot = .7; // rad/s
+double maxq2dot = .7; // rad/s
+double maxq1ddot = 1.05; // rad/s/s
+double maxq2ddot = 1.05; // rad/s/s
 ////////////////////////////
 void setup() {
   fullScreen();
@@ -318,9 +318,10 @@ class Trajectory {
       double dtheta = currPt.v_theta - prevPt.v_theta;
       double curvature = dtheta / ds;
       double sa = Math.abs(Math.sin(currPt.v_theta));
-      if ((currPt.v * currPt.v * curvature * sa) > maxq1ddot) {
+      double ca = Math.abs(Math.cos(currPt.v_theta));
+      if ((currPt.v * currPt.v * curvature * ca) > maxq1ddot) {
         currPt.step = 1;
-        currPt.v = Math.min(currPt.v, Math.sqrt(maxq1ddot / sa / curvature));
+        currPt.v = Math.min(currPt.v, Math.sqrt(maxq1ddot / ca / curvature));
       }
       if ((currPt.v * currPt.v * curvature * sa) > maxq2ddot) {
         currPt.step = 1;
@@ -401,7 +402,7 @@ class Trajectory {
           pt.show((float)pt.v + .2);
         break;
         case 1:
-          pt.show((float)pt.v + .2, color(#FFEB08));
+          pt.show((float)pt.v + .2, green);
         break;
         case 2:
           pt.show((float)pt.v + .2, blue);
