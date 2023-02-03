@@ -14,7 +14,6 @@ final int TEAM_NUMBER = 449;
 final double L1 = .5;
 final double L2 = .4;
 Arm arm = new Arm(L1, L2);
-Point armBase = new Point(0.0, 0.0);
 
 //////////////////////////// Colors
 int red = color(255, 0, 0);
@@ -30,18 +29,17 @@ ArmState end = fromDegrees(70, -20);
 /////////////// Trajectory config
 Trajectory traj;
 boolean showTraj = false;
-double T = 5.0; // Total time seconds of trajectory
 long startTime = System.currentTimeMillis();
 long prevTime = System.currentTimeMillis();
 // CONSTRAINTS
-double maxq1dot = PI/3; // rad/s
-double maxq2dot =  PI/3; // rad/s
-double maxq1ddot = PI/8; // rad/s/s
-double maxq2ddot = PI/6; // rad/s/s
+double maxq1dot = .7; // rad/s
+double maxq2dot = .7; // rad/s
+double maxq1ddot = .5; // rad/s/s
+double maxq2ddot = .5; // rad/s/s
 ////////////////////////////
 void setup() {
   fullScreen();
-  frameRate(240);
+  frameRate(60);
   heightMeters = displayHeight * PIXEL_TO_METER;
   widthMeters = displayWidth * PIXEL_TO_METER;
   heightRadians = displayHeight * PIXEL_TO_RAD;
@@ -170,12 +168,14 @@ void draw() {
   double dt = (currentTime - prevTime) / 1000.0;
   background(0);
   drawRobot();
+  // show the trajectory and path so that it can be modified
   if (showTraj) {
     path.showPath();
     traj.show();
     path.show();
   }
   arm.show();
+  // use velocity instead
   var sample = traj.sample(t % traj.totalTimeSeconds);
   var dv = new ArmState(sample.q1dot, sample.q2dot).times(dt);
   arm.currentState = sample.plus(dv);
@@ -285,27 +285,58 @@ class Trajectory {
       if (curr.t > t) {
         // interpolate between prev and current
         ArmState diff = curr.minus(prev);
+        ArmState prevV = new ArmState(prev.q1dot, prev.q2dot);
+        ArmState vDiff = new ArmState(curr.q1dot, curr.q2dot).minus(prevV);
         double t_err = t - prev.t;
         double dt = curr.t - prev.t;
         double k = t_err / dt;
-        return prev.plus(diff.times(k));
+        ArmState qdot = prevV.plus(vDiff.times(k));
+        ArmState q = prev.plus(diff.times(k));
+        q.q1dot = qdot.q1dot;
+        q.q2dot = qdot.q2dot;
+        return q;
       }
     }
     return points.get(n-1);
   }
   // O(n) n = number of points sampled
   public void parametrizeTrajectory() {
-    points = path.collectSamples(1000); // collect 1000 samples from path to use for generating trajectory
+    points = path.collectSamples(2000); // collect 1000 samples from path to use for generating trajectory
     
     double maxV = Math.sqrt(maxq1dot * maxq1dot + maxq2dot * maxq2dot);
-    double maxA = (maxq2dot * maxq2ddot + maxq2dot * maxq2ddot) / maxV;
     int n = points.size();
     // ***************************
     // parametrize trajectory here
     
-    // Step 1: set every velocity to the maximum that follows all constraints
+    // Step 0: set every velocity to the maximum that follows all constraints
     for (ArmState point : points) {
       point.v = maxV;
+      point.step = 0;
+    }
+    
+    // Step 1: Apply curvature constraints,
+    // Allows the arm to slow down on tight changes in direction of v
+    for (int i = 1; i < n; i++) {
+      ArmState currPt = points.get(i);
+      ArmState prevPt = points.get(i-1);
+      double ds = Math.abs(currPt.s - prevPt.s);
+      double dtheta = currPt.v_theta - prevPt.v_theta;
+      // wrap around dtheta
+      if (dtheta > PI)
+        dtheta -= 2 * PI;
+      else if (dtheta < -PI)
+        dtheta += 2 * PI;
+      double curvature = Math.abs(dtheta / ds);
+      double sa = Math.abs(Math.sin(currPt.v_theta));
+      double ca = Math.abs(Math.cos(currPt.v_theta));
+      if ((currPt.v * currPt.v * curvature * sa) > maxq1ddot) {
+        currPt.step = 1;
+        currPt.v = Math.min(currPt.v, Math.sqrt(maxq1ddot / sa / curvature));
+      }
+      if ((currPt.v * currPt.v * curvature * ca) > maxq2ddot) {
+        currPt.step = 1;
+        currPt.v = Math.min(currPt.v, Math.sqrt(maxq2ddot / ca / curvature));
+      }
     }
     
     // Step 2: Forward pass, start with v as 0.0
@@ -315,7 +346,11 @@ class Trajectory {
       ArmState currPt = points.get(i);
       ArmState prevPt = points.get(i-1);
       double ds = Math.abs(currPt.s - prevPt.s);
+      double q1dot = Math.abs((Math.cos(currPt.v_theta)));
+      double q2dot = Math.abs((Math.sin(currPt.v_theta)));
+      double maxA = (q1dot * maxq1ddot + q2dot * maxq2ddot);
       double vi = prevPt.v;
+      if (Math.sqrt(vi * vi + 2.0 * maxA * ds) <= currPt.v) currPt.step = 2;
       double vf = Math.min(currPt.v, Math.sqrt(vi * vi + 2.0 * maxA * ds));
       currPt.v = vf;
     }
@@ -327,7 +362,11 @@ class Trajectory {
       ArmState currPt = points.get(i);
       ArmState prevPt = points.get(i+1);
       double ds = Math.abs(currPt.s - prevPt.s);
+      double q1dot = Math.abs((Math.cos(currPt.v_theta)));
+      double q2dot = Math.abs((Math.sin(currPt.v_theta)));
+      double maxA = (q1dot * maxq1ddot + q2dot * maxq2ddot);
       double vi = prevPt.v;
+      if (Math.sqrt(vi * vi + 2.0 * maxA * ds) <= currPt.v) currPt.step = 3;
       double vf = Math.min(currPt.v, Math.sqrt(vi * vi + 2.0 * maxA * ds));
       currPt.v = vf;
       currPt.q1dot = (float)(currPt.v * Math.cos(currPt.v_theta));
@@ -369,7 +408,23 @@ class Trajectory {
   }
   public void show() {
     for (ArmState pt : points) {
-      pt.show((float)pt.v + .2);
+      switch(pt.step) {
+        case 0:
+          pt.show((float)pt.v + .2);
+        break;
+        case 1:
+          pt.show((float)pt.v + .2, green);
+        break;
+        case 2:
+          pt.show((float)pt.v + .2, blue);
+        break;
+        case 3:
+          pt.show((float)pt.v + .2, red);
+        break;
+        default: 
+          pt.show((float)pt.v + .2, color(0, 255, 0));
+      }
+      
       arm.showEndEffector(pt, teal);
     }
   }
@@ -392,6 +447,8 @@ class ArmState {
   double v_theta;
   double v;
   float t;
+  int step;
+  
   public ArmState(double q1, double q2) {
     this.q1 = (float) q1;
     this.q2 = (float) q2;
