@@ -14,6 +14,7 @@ final int TEAM_NUMBER = 449;
 final double L1 = .5;
 final double L2 = .4;
 Arm arm = new Arm(L1, L2);
+Point armBase = new Point(0.0, 0.0);
 
 //////////////////////////// Colors
 int red = color(255, 0, 0);
@@ -34,8 +35,8 @@ long prevTime = System.currentTimeMillis();
 // CONSTRAINTS
 double maxq1dot = .7; // rad/s
 double maxq2dot = .7; // rad/s
-double maxq1ddot = 1.05; // rad/s/s
-double maxq2ddot = 1.05; // rad/s/s
+double maxq1ddot = .5; // rad/s/s
+double maxq2ddot = .5; // rad/s/s
 ////////////////////////////
 void setup() {
   fullScreen();
@@ -285,36 +286,47 @@ class Trajectory {
       if (curr.t > t) {
         // interpolate between prev and current
         ArmState diff = curr.minus(prev);
+        ArmState prevV = new ArmState(prev.q1dot, prev.q2dot);
+        ArmState vDiff = new ArmState(curr.q1dot, curr.q2dot).minus(prevV);
         double t_err = t - prev.t;
         double dt = curr.t - prev.t;
         double k = t_err / dt;
-        return prev.plus(diff.times(k));
+        ArmState qdot = prevV.plus(vDiff.times(k));
+        ArmState q = prev.plus(diff.times(k));
+        q.q1dot = qdot.q1dot;
+        q.q2dot = qdot.q2dot;
+        return q;
       }
     }
     return points.get(n-1);
   }
   // O(n) n = number of points sampled
   public void parametrizeTrajectory() {
-    points = path.collectSamples(2000); // collect 1000 samples from path to use for generating trajectory
+    points = path.collectSamples(1000); // collect 1000 samples from path to use for generating trajectory
     
     double maxV = Math.sqrt(maxq1dot * maxq1dot + maxq2dot * maxq2dot);
     int n = points.size();
     // ***************************
     // parametrize trajectory here
     
-    // Step 1: set every velocity to the maximum that follows all constraints
+    // Step 0: set every velocity to the maximum that follows all constraints
     for (ArmState point : points) {
       point.v = maxV;
       point.step = 0;
     }
     
-    // Step 2: Apply curvature constraints,
+    // Step 1: Apply curvature constraints,
     // Allows the arm to slow down on tight changes in direction of v
     for (int i = 1; i < n; i++) {
       ArmState currPt = points.get(i);
       ArmState prevPt = points.get(i-1);
       double ds = Math.abs(currPt.s - prevPt.s);
       double dtheta = currPt.v_theta - prevPt.v_theta;
+      // wrap around dtheta
+      if (dtheta > 180)
+        dtheta -= 2 * PI;
+      else if (dtheta < -180)
+        dtheta += 2 * PI;
       double curvature = Math.abs(dtheta / ds);
       double sa = Math.abs(Math.sin(currPt.v_theta));
       double ca = Math.abs(Math.cos(currPt.v_theta));
@@ -327,6 +339,7 @@ class Trajectory {
         currPt.v = Math.min(currPt.v, Math.sqrt(maxq2ddot / ca / curvature));
       }
     }
+    
     // Step 2: Forward pass, start with v as 0.0
     // Use equation vf = sqrt(v0^2 + 2ad)
     points.get(0).v = 0.0; // start at v = 0
