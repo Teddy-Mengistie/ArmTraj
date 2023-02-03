@@ -14,7 +14,6 @@ final int TEAM_NUMBER = 449;
 final double L1 = .5;
 final double L2 = .4;
 Arm arm = new Arm(L1, L2);
-Point armBase = new Point(0.0, 0.0);
 
 //////////////////////////// Colors
 int red = color(255, 0, 0);
@@ -316,7 +315,7 @@ class Trajectory {
       ArmState prevPt = points.get(i-1);
       double ds = Math.abs(currPt.s - prevPt.s);
       double dtheta = currPt.v_theta - prevPt.v_theta;
-      double curvature = dtheta / ds;
+      double curvature = Math.abs(dtheta / ds);
       double sa = Math.abs(Math.sin(currPt.v_theta));
       double ca = Math.abs(Math.cos(currPt.v_theta));
       if ((currPt.v * currPt.v * curvature * sa) > maxq1ddot) {
