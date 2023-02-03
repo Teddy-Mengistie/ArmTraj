@@ -14,7 +14,6 @@ final int TEAM_NUMBER = 449;
 final double L1 = .5;
 final double L2 = .4;
 Arm arm = new Arm(L1, L2);
-Point armBase = new Point(0.0, 0.0);
 
 //////////////////////////// Colors
 int red = color(255, 0, 0);
@@ -302,7 +301,7 @@ class Trajectory {
   }
   // O(n) n = number of points sampled
   public void parametrizeTrajectory() {
-    points = path.collectSamples(1000); // collect 1000 samples from path to use for generating trajectory
+    points = path.collectSamples(2000); // collect 1000 samples from path to use for generating trajectory
     
     double maxV = Math.sqrt(maxq1dot * maxq1dot + maxq2dot * maxq2dot);
     int n = points.size();
@@ -323,9 +322,9 @@ class Trajectory {
       double ds = Math.abs(currPt.s - prevPt.s);
       double dtheta = currPt.v_theta - prevPt.v_theta;
       // wrap around dtheta
-      if (dtheta > 180)
+      if (dtheta > PI)
         dtheta -= 2 * PI;
-      else if (dtheta < -180)
+      else if (dtheta < -PI)
         dtheta += 2 * PI;
       double curvature = Math.abs(dtheta / ds);
       double sa = Math.abs(Math.sin(currPt.v_theta));
