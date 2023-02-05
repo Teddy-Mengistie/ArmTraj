@@ -72,21 +72,21 @@ void setup() {
     .setMode(ControlP5.SWITCH);
   // save the trajectory to a file
   // code here
-
+  
   // ****** text box for point a ******
   cp5.addTextfield("q2")
     .setPosition(10, height - 40)
     .setSize(100, 20)
     .moveTo("Point A")
     .setAutoClear(false)
-    .setInputFilter(2); // allow only floating point input
+    .setInputFilter(3); // allow only floating point input
 
   cp5.addTextfield("q1")
     .setPosition(10, height - 80)
     .setSize(100, 20)
     .moveTo("Point A")
     .setAutoClear(false)
-    .setInputFilter(2);
+    .setInputFilter(3);
 
   //****** text boxes for point b ******
   cp5.addTextfield("q2b")
@@ -95,7 +95,7 @@ void setup() {
     .moveTo("Point B")
     .setLabel("q2 (B)")
     .setAutoClear(false)
-    .setInputFilter(2);
+    .setInputFilter(3);
 
   cp5.addTextfield("q1b")
     .setPosition(10, height - 80)
@@ -103,7 +103,7 @@ void setup() {
     .moveTo("Point B")
     .setLabel("q1 (B)")
     .setAutoClear(false)
-    .setInputFilter(2);
+    .setInputFilter(3);
   
   /** File name field */
   fileName = cp5.addTextfield("fileName")
@@ -325,8 +325,8 @@ class Path {
     sample(0.0).show(6, green);
     for (double t = .02; t < 1.0; t += .02) {
       ArmState pt = sample(t);
-      pt.show(3);
-      arm.showEndEffector(pt, color(255, 255, 255));
+      pt.show(3, color(255, 255, 255, 50));
+      arm.showEndEffector(pt, color(255, 255, 255, 80));
     }
     sample(1.0).show(6, red);
   }
@@ -476,7 +476,7 @@ class Trajectory {
       currState.setFloat("q2", state.q2);
       currState.setFloat("q1d", state.q1dot);
       currState.setFloat("q2d", state.q2dot);
-      currState.setFloat("velociy", (float)state.v);
+      currState.setFloat("velocity", (float)state.v);
       currState.setFloat("s", (float)state.s);
       currState.setFloat("velocity angle radians", (float)state.v_theta);
       states.setJSONObject(i, currState);
@@ -488,16 +488,16 @@ class Trajectory {
     for (ArmState pt : points) {
       switch(pt.step) {
       case 0:
-        pt.show((float)pt.v + .2, blue + green + (green + red));
+        pt.show((float)pt.v + .2, color(255));
         break;
       case 1:
-        pt.show((float)pt.v + .2, red);
-        break;
-      case 2:
         pt.show((float)pt.v + .2, green);
         break;
+      case 2:
+        pt.show((float)pt.v + .2, blue);
+        break;
       case 3:
-        pt.show((float)pt.v + .2, green + red);
+        pt.show((float)pt.v + .2, red);
         break;
       default:
         pt.show((float)pt.v + .2, color(0, 255, 0));
@@ -610,7 +610,7 @@ public float toRadians(float degree) {
 }
 // called by toggle
 void show(boolean flag) {
-  showTraj = !showTraj;
+  showTraj = !flag;
 }
 
 void q1(String newValue) {
@@ -656,7 +656,6 @@ boolean draggingA = false;
 boolean draggingB = false;
 
 void mousePressed() {
-  System.out.println("Running.");
   if (new ArmState(mouseX, mouseY).minus(path.a1.asPixel()).mag() <= 5.0) {
     draggingA = true;
   } else if (new ArmState(mouseX, mouseY).minus(path.a2.asPixel()).mag() <= 5.0) {
