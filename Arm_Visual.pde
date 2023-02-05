@@ -61,7 +61,7 @@ void setup() {
   traj = new Trajectory(maxq1dot, maxq2dot, maxq1ddot, maxq2ddot, path);
   // Start UI
   cp5 = new ControlP5(this);
-  
+
   // Default tab to be renamed to trajectory tab instead
   cp5.getTab("default").setLabel("trajectory");
   // switch for traj
@@ -72,7 +72,7 @@ void setup() {
     .setMode(ControlP5.SWITCH);
   // save the trajectory to a file
   // code here
-  
+
   // ****** text box for point a ******
   cp5.addTextfield("q2")
     .setPosition(10, height - 40)
@@ -104,7 +104,7 @@ void setup() {
     .setLabel("q1 (B)")
     .setAutoClear(false)
     .setInputFilter(3);
-  
+
   /** File name field */
   fileName = cp5.addTextfield("fileName")
     .setPosition(10, height - 80)
@@ -112,20 +112,20 @@ void setup() {
     .setLabel("Name")
     .setAutoClear(false)
     .setInputFilter(0);
-    
+
   // button to save to json file
   cp5.addBang("save")
     .setPosition(120, height - 80)
     .setSize(50, 20)
     .align(ControlP5.CENTER, ControlP5.CENTER, ControlP5.CENTER, ControlP5.CENTER);
-  
+
   // button to generate the trajectory from the path
   cp5.addBang("generate")
     .setPosition(70, height - 40)
     .setSize(100, 20)
     .setLabel("Generate Trajectory")
     .align(ControlP5.CENTER, ControlP5.CENTER, ControlP5.CENTER, ControlP5.CENTER);
-    
+
   // add option to have a clear UI
   cp5.addTab("Clear UI");
 }
@@ -606,7 +606,7 @@ public ArmState fromDegrees(double theta, double beta) {
 }
 
 public float toRadians(float degree) {
-  return degree * PI / 180;  
+  return degree * PI / 180;
 }
 // called by toggle
 void show(boolean flag) {
@@ -639,7 +639,7 @@ void q2b(String newValue) {
 
 void save() {
   String file = fileName.getText();
-  if (file.contains(".")) return; // trying to save 
+  if (file.contains(".")) return; // trying to save
   traj.save(file);
 }
 
