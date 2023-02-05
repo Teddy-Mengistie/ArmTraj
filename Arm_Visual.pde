@@ -1,5 +1,10 @@
+import controlP5.*;
 import java.util.*;
 
+// UI objects
+ControlP5 cp5;
+Textfield fileName;
+// axis properties
 double heightMeters;
 double widthMeters;
 double heightRadians;
@@ -8,9 +13,13 @@ Point center;
 ArmState origin;
 final float PIXEL_TO_METER = 1 / 200.0; // 1 meter per 200 pixels, 1 pixel = 1/200 meters
 final double PIXEL_TO_RAD = 1 / (1080/ (2 * PI));
+
+// Robot
 final float ROBOT_WIDTH = 0.8128; // the width of the robot to be drawn
 final float ROBOT_HEIGHT = .1048;
 final int TEAM_NUMBER = 449;
+
+// Arm
 final double L1 = .5;
 final double L2 = .4;
 Arm arm = new Arm(L1, L2);
@@ -32,22 +41,93 @@ boolean showTraj = false;
 long startTime = System.currentTimeMillis();
 long prevTime = System.currentTimeMillis();
 // CONSTRAINTS
-double maxq1dot = .7; // rad/s
-double maxq2dot = .7; // rad/s
-double maxq1ddot = .5; // rad/s/s
-double maxq2ddot = .5; // rad/s/s
+double maxq1dot = 1.7; // rad/s
+double maxq2dot = 1.7; // rad/s
+double maxq1ddot = 1.5; // rad/s/s
+double maxq2ddot = 1.5; // rad/s/s
 ////////////////////////////
 void setup() {
   fullScreen();
-  frameRate(60);
+  frameRate(160);
+  // axis generation
   heightMeters = displayHeight * PIXEL_TO_METER;
   widthMeters = displayWidth * PIXEL_TO_METER;
   heightRadians = displayHeight * PIXEL_TO_RAD;
   widthRadians = displayWidth * PIXEL_TO_RAD;
   center = new Point(widthMeters / 2, heightMeters/2);
   origin = new ArmState(0.0, heightRadians/2);
+  // path and trajectory initiation
   path = new Path(start, a1, a2, end);
   traj = new Trajectory(maxq1dot, maxq2dot, maxq1ddot, maxq2ddot, path);
+  // Start UI
+  cp5 = new ControlP5(this);
+
+  // Default tab to be renamed to trajectory tab instead
+  cp5.getTab("default").setLabel("trajectory");
+  // switch for traj
+  cp5.addToggle("show")
+    .setPosition(10, height - 40)
+    .setSize(50, 20)
+    .setValue(false)
+    .setMode(ControlP5.SWITCH);
+  // save the trajectory to a file
+  // code here
+
+  // ****** text box for point a ******
+  cp5.addTextfield("q2")
+    .setPosition(10, height - 40)
+    .setSize(100, 20)
+    .moveTo("Point A")
+    .setAutoClear(false)
+    .setInputFilter(3); // allow only floating point input
+
+  cp5.addTextfield("q1")
+    .setPosition(10, height - 80)
+    .setSize(100, 20)
+    .moveTo("Point A")
+    .setAutoClear(false)
+    .setInputFilter(3);
+
+  //****** text boxes for point b ******
+  cp5.addTextfield("q2b")
+    .setPosition(10, height - 40)
+    .setSize(100, 20)
+    .moveTo("Point B")
+    .setLabel("q2 (B)")
+    .setAutoClear(false)
+    .setInputFilter(3);
+
+  cp5.addTextfield("q1b")
+    .setPosition(10, height - 80)
+    .setSize(100, 20)
+    .moveTo("Point B")
+    .setLabel("q1 (B)")
+    .setAutoClear(false)
+    .setInputFilter(3);
+
+  /** File name field */
+  fileName = cp5.addTextfield("fileName")
+    .setPosition(10, height - 80)
+    .setSize(100, 20)
+    .setLabel("Name")
+    .setAutoClear(false)
+    .setInputFilter(0);
+
+  // button to save to json file
+  cp5.addBang("save")
+    .setPosition(120, height - 80)
+    .setSize(50, 20)
+    .align(ControlP5.CENTER, ControlP5.CENTER, ControlP5.CENTER, ControlP5.CENTER);
+
+  // button to generate the trajectory from the path
+  cp5.addBang("generate")
+    .setPosition(70, height - 40)
+    .setSize(100, 20)
+    .setLabel("Generate Trajectory")
+    .align(ControlP5.CENTER, ControlP5.CENTER, ControlP5.CENTER, ControlP5.CENTER);
+
+  // add option to have a clear UI
+  cp5.addTab("Clear UI");
 }
 ////////////////
 public void drawRobot() {
@@ -135,7 +215,7 @@ class Arm {
     this.l1 = l1;
     this.l2 = l2;
   }
-  
+
   // show only end effector of this state
   public void showEndEffector(ArmState state, int col) {
     double c1 = Math.cos(state.q1);
@@ -144,7 +224,7 @@ class Arm {
     double s12 = Math.sin(state.q1 + state.q2);
     new Point(l1 * c1 + l2 * c12, l1 * s1 + l2 * s12).show(1, col);
   }
-  
+
   // Show the arm using some geometry (forward kinematics)
   public void show() {
     double c1 = Math.cos(currentState.q1);
@@ -153,14 +233,13 @@ class Arm {
     double s12 = Math.sin(currentState.q1 + currentState.q2);
     Point endEffector = new Point(l1 * c1 + l2 * c12, l1 * s1 + l2 * s12);
     Point joint = new Point(l1 * c1, l1 * s1);
-    new Point(0,0).lineTo(joint);
+    new Point(0, 0).lineTo(joint);
     joint.lineTo(endEffector);
     endEffector.show(10, red);
     joint.show(10, red);
-    new Point(0,0).show(20, green);
+    new Point(0, 0).show(20, green);
   }
 }
-int index = 0;
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void draw() {
   long currentTime = System.currentTimeMillis();
@@ -241,24 +320,24 @@ class Path {
     }
     return result;
   }
-  
+
   public void showPath() {
     sample(0.0).show(6, green);
     for (double t = .02; t < 1.0; t += .02) {
       ArmState pt = sample(t);
-      pt.show(3);
-      arm.showEndEffector(pt, color(255, 255, 255));
+      pt.show(3, color(255, 255, 255, 50));
+      arm.showEndEffector(pt, color(255, 255, 255, 80));
     }
     sample(1.0).show(6, red);
   }
-  
+
   public void show() {
     start.lineTo(a1);
     end.lineTo(a2);
     start.show(12, green);
     a1.show(12);
     a2.show(12);
-    end.show(12, red);  
+    end.show(12, red);
   }
 }
 
@@ -273,9 +352,9 @@ class Trajectory {
     this.maxq1ddot = maxq1ddot;
     this.maxq2ddot = maxq2ddot;
     this.path = path;
-    parametrizeTrajectory();    
+    parametrizeTrajectory();
   }
-  
+
   public ArmState sample(double t) {
     int n = points.size();
     for (int i = 1; i < n; i++) {
@@ -302,18 +381,18 @@ class Trajectory {
   // O(n) n = number of points sampled
   public void parametrizeTrajectory() {
     points = path.collectSamples(2000); // collect 1000 samples from path to use for generating trajectory
-    
+
     double maxV = Math.sqrt(maxq1dot * maxq1dot + maxq2dot * maxq2dot);
     int n = points.size();
     // ***************************
     // parametrize trajectory here
-    
+
     // Step 0: set every velocity to the maximum that follows all constraints
     for (ArmState point : points) {
       point.v = maxV;
       point.step = 0;
     }
-    
+
     // Step 1: Apply curvature constraints,
     // Allows the arm to slow down on tight changes in direction of v
     for (int i = 1; i < n; i++) {
@@ -338,7 +417,7 @@ class Trajectory {
         currPt.v = Math.min(currPt.v, Math.sqrt(maxq2ddot / ca / curvature));
       }
     }
-    
+
     // Step 2: Forward pass, start with v as 0.0
     // Use equation vf = sqrt(v0^2 + 2ad)
     points.get(0).v = 0.0; // start at v = 0
@@ -354,7 +433,7 @@ class Trajectory {
       double vf = Math.min(currPt.v, Math.sqrt(vi * vi + 2.0 * maxA * ds));
       currPt.v = vf;
     }
-    
+
     // Step 3: Backward pass
     // Use equation vf = sqrt(v0^2 + 2ad)
     points.get(n-1).v = 0.0; // start at v = 0
@@ -375,7 +454,7 @@ class Trajectory {
     // ***************************
     // Step 4: find t at each point
     points.get(0).t = 0;
-    for (int i = 1; i < points.size(); i++){
+    for (int i = 1; i < points.size(); i++) {
       ArmState curr = points.get(i);
       ArmState prev = points.get(i-1);
       double ds = curr.s - prev.s;
@@ -383,48 +462,47 @@ class Trajectory {
       curr.t = (float)(prev.t + dt);
       totalTimeSeconds = curr.t;
     }
-    
   }
-  
-  public void save() {
-    
-      JSONArray states = new JSONArray();
-      
-      for (int i = 0; i < points.size(); i++) {
-        JSONObject currState = new JSONObject();
-        ArmState state = points.get(i);
-        currState.setFloat("t", (float)state.t);
-        currState.setFloat("q1", state.q1);
-        currState.setFloat("q2", state.q2);
-        currState.setFloat("q1d", state.q1dot);
-        currState.setFloat("q2d", state.q2dot);
-        currState.setFloat("velociy", (float)state.v);
-        currState.setFloat("s", (float)state.s);
-        currState.setFloat("velocity angle radians", (float)state.v_theta);
-        states.setJSONObject(i, currState);
-      }
-      
-      saveJSONArray(states, "traj.json");
+
+  public void save(String fileName) {
+
+    JSONArray states = new JSONArray();
+
+    for (int i = 0; i < points.size(); i++) {
+      JSONObject currState = new JSONObject();
+      ArmState state = points.get(i);
+      currState.setFloat("t", (float)state.t);
+      currState.setFloat("q1", state.q1);
+      currState.setFloat("q2", state.q2);
+      currState.setFloat("q1d", state.q1dot);
+      currState.setFloat("q2d", state.q2dot);
+      currState.setFloat("velocity", (float)state.v);
+      currState.setFloat("s", (float)state.s);
+      currState.setFloat("velocity angle radians", (float)state.v_theta);
+      states.setJSONObject(i, currState);
+    }
+
+    saveJSONArray(states, fileName + ".json");
   }
   public void show() {
     for (ArmState pt : points) {
       switch(pt.step) {
-        case 0:
-          pt.show((float)pt.v + .2);
+      case 0:
+        pt.show((float)pt.v + .2, color(255));
         break;
-        case 1:
-          pt.show((float)pt.v + .2, green);
+      case 1:
+        pt.show((float)pt.v + .2, green);
         break;
-        case 2:
-          pt.show((float)pt.v + .2, blue);
+      case 2:
+        pt.show((float)pt.v + .2, blue);
         break;
-        case 3:
-          pt.show((float)pt.v + .2, red);
+      case 3:
+        pt.show((float)pt.v + .2, red);
         break;
-        default: 
-          pt.show((float)pt.v + .2, color(0, 255, 0));
+      default:
+        pt.show((float)pt.v + .2, color(0, 255, 0));
       }
-      
+
       arm.showEndEffector(pt, teal);
     }
   }
@@ -448,7 +526,7 @@ class ArmState {
   double v;
   float t;
   int step;
-  
+
   public ArmState(double q1, double q2) {
     this.q1 = (float) q1;
     this.q2 = (float) q2;
@@ -465,7 +543,7 @@ class ArmState {
   public ArmState times(double k) {
     return new ArmState(q1* k, q2* k);
   }
-  
+
   public double getAngle() {
     return atan2(q2, q1);
   }
@@ -527,38 +605,70 @@ public ArmState fromDegrees(double theta, double beta) {
   return new ArmState(theta, beta);
 }
 
-void keyPressed() {
-  // t - show and edit trajectory
-  if (keyCode == 'T') {
-    showTraj = !showTraj;
+public float toRadians(float degree) {
+  return degree * PI / 180;
+}
+// called by toggle
+void show(boolean flag) {
+  showTraj = !flag;
+}
+
+void q1(String newValue) {
+  float val = (float)Double.parseDouble(newValue);
+  val = Math.min(Math.max(0, val), 180);
+  start.q1 = toRadians(val);
+}
+
+void q2(String newValue) {
+  float val = (float)Double.parseDouble(newValue);
+  val = Math.min(Math.max(-180, val), 180);
+  start.q2 = toRadians(val);
+}
+
+void q1b(String newValue) {
+  float val = (float)Double.parseDouble(newValue);
+  val = Math.min(Math.max(0, val), 180);
+  end.q1 = toRadians(val);
+}
+
+void q2b(String newValue) {
+  float val = (float)Double.parseDouble(newValue);
+  val = Math.min(Math.max(-180, val), 180);
+  end.q2 = toRadians(val);
+}
+
+void save() {
+  String file = fileName.getText();
+  if (file.contains(".")) return; // trying to save
+  traj.save(file);
+}
+
+void generate() {
+  traj.parametrizeTrajectory();
+}
+
+
+//////////////////////////
+// Mouse functionality ///
+//////////////////////////
+
+boolean draggingA = false;
+boolean draggingB = false;
+
+void mousePressed() {
+  if (new ArmState(mouseX, mouseY).minus(path.a1.asPixel()).mag() <= 5.0) {
+    draggingA = true;
+  } else if (new ArmState(mouseX, mouseY).minus(path.a2.asPixel()).mag() <= 5.0) {
+    draggingB = true;
   }
-  
-  // Move start, end, or anchor points of path
-  if (showTraj) {
-    if (keyCode == 'A') {
-      path.start = new ArmState(mouseX, mouseY).asPoint();
-    }
-    if (keyCode == 'B') {
-      path.a1 = new ArmState(mouseX, mouseY).asPoint();
-    }
-    if (keyCode == 'C') {
-      path.a2 = new ArmState(mouseX, mouseY).asPoint();
-    }
-    if (keyCode == 'D') {
-      path.end = new ArmState(mouseX, mouseY).asPoint();
-    }
-  }  
-  
-  // P - play animation
-  if (keyCode == 'P') {
-    startTime = System.currentTimeMillis();
-  }
-  // S - save trajectory
-  if (keyCode == 'S') {
-    traj.save();
-  }
-  // G - generate trajectory for specified path
-  if (keyCode == 'G') {
-    traj.parametrizeTrajectory();  
-  }
+}
+
+void mouseDragged() {
+  if (draggingA) path.a1 = new ArmState(mouseX, mouseY).asPoint();
+  else if (draggingB) path.a2 = new ArmState(mouseX, mouseY).asPoint();
+}
+
+void mouseReleased() {
+  draggingA = false;
+  draggingB = false;
 }
