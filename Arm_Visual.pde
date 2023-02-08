@@ -4,6 +4,10 @@ import java.util.*;
 // UI objects
 ControlP5 cp5;
 Textfield fileName;
+Textfield Q1D;
+Textfield Q2D;
+Textfield Q1DD;
+Textfield Q2DD;
 // axis properties
 double heightMeters;
 double widthMeters;
@@ -73,6 +77,40 @@ void setup() {
   // save the trajectory to a file
   // code here
 
+
+  // ****** text box for changing the constraints ******
+  Q1D = cp5.addTextfield("max q1 vel")
+    .setPosition(10, height - 80)
+    .setSize(100, 20)
+    .moveTo("constraints")
+    .setValue(maxq1dot + "")
+    .setAutoClear(false)
+    .setInputFilter(2);
+
+  Q2D = cp5.addTextfield("max q2 vel")
+    .setPosition(10, height - 40)
+    .setSize(100, 20)
+    .moveTo("constraints")
+    .setValue(maxq2dot + "")
+    .setAutoClear(false)
+    .setInputFilter(2);
+
+  Q1DD = cp5.addTextfield("max q1 accel")
+    .setPosition(120, height - 80)
+    .setSize(100, 20)
+    .moveTo("constraints")
+    .setValue(maxq2ddot + "")
+    .setAutoClear(false)
+    .setInputFilter(2);
+
+  Q2DD = cp5.addTextfield("max q2 accel")
+    .setPosition(120, height - 40)
+    .setSize(100, 20)
+    .moveTo("constraints")
+    .setValue(maxq2ddot + "")
+    .setAutoClear(false)
+    .setInputFilter(2);
+
   // ****** text box for point a ******
   cp5.addTextfield("q2")
     .setPosition(10, height - 40)
@@ -117,6 +155,17 @@ void setup() {
   cp5.addBang("save")
     .setPosition(120, height - 80)
     .setSize(50, 20)
+    .align(ControlP5.CENTER, ControlP5.CENTER, ControlP5.CENTER, ControlP5.CENTER);
+
+  // button to load a json file
+  cp5.addBang("load")
+    .setPosition(180, height - 40)
+    .setSize(50, 20)
+    .align(ControlP5.CENTER, ControlP5.CENTER, ControlP5.CENTER, ControlP5.CENTER);
+
+  cp5.addBang("reverse")
+    .setPosition(180, height - 80)
+    .setSize(80, 20)
     .align(ControlP5.CENTER, ControlP5.CENTER, ControlP5.CENTER, ControlP5.CENTER);
 
   // button to generate the trajectory from the path
@@ -222,7 +271,7 @@ class Arm {
     double s1 = Math.sin(state.q1);
     double c12 = Math.cos(state.q1 + state.q2);
     double s12 = Math.sin(state.q1 + state.q2);
-    new Point(l1 * c1 + l2 * c12, l1 * s1 + l2 * s12).show(1, col);
+    new Point(l1 * c1 + l2 * c12, l1 * s1 + l2 * s12).show(2, col);
   }
 
   // Show the arm using some geometry (forward kinematics)
@@ -284,24 +333,6 @@ class Path {
     return bezier(start, a1, a2, end, t);
   }
   /**
-   * @param len the length along the path that this point is at
-   */
-  public ArmState s(double len) {
-    double dt = 0.0001;
-    double distance = 0.0;
-    for (double t = 0; t < 1.0; t += dt) {
-      ArmState currState = sample(t);
-      ArmState nextState = sample(t + dt);
-      var ds = currState.minus(nextState).mag();
-      distance += ds;
-      if (distance >= len) {
-        return nextState.minus(currState).times((distance - len) / ds).plus(currState);
-      }
-    }
-    return sample(1.0);
-  }
-
-  /**
    * @param ds the space between each point along the path to be satisfied
    */
   public List<ArmState> collectSamples(int n) {
@@ -326,7 +357,7 @@ class Path {
     for (double t = .02; t < 1.0; t += .02) {
       ArmState pt = sample(t);
       pt.show(3, color(255, 255, 255, 50));
-      arm.showEndEffector(pt, color(255, 255, 255, 80));
+      arm.showEndEffector(pt, color(255, 255, 255));
     }
     sample(1.0).show(6, red);
   }
@@ -378,9 +409,25 @@ class Trajectory {
     }
     return points.get(n-1);
   }
+
+  public void updateConstraints() {
+    maxq1dot = Double.parseDouble(Q1D.getText());
+    maxq2dot = Double.parseDouble(Q2D.getText());
+    maxq1ddot = Double.parseDouble(Q1DD.getText());
+    maxq2ddot = Double.parseDouble(Q2DD.getText());
+  }
   // O(n) n = number of points sampled
   public void parametrizeTrajectory() {
-    points = path.collectSamples(2000); // collect 1000 samples from path to use for generating trajectory
+
+    // collect samples from path to use for generating trajectory
+    points = path.collectSamples(2000);
+
+    try {
+      updateConstraints();
+    }
+    catch(Exception e) {
+      // do nothing
+    }
 
     double maxV = Math.sqrt(maxq1dot * maxq1dot + maxq2dot * maxq2dot);
     int n = points.size();
@@ -466,7 +513,7 @@ class Trajectory {
 
   public void save(String fileName) {
 
-    JSONArray states = new JSONArray();
+    JSONArray array = new JSONArray();
 
     for (int i = 0; i < points.size(); i++) {
       JSONObject currState = new JSONObject();
@@ -476,13 +523,23 @@ class Trajectory {
       currState.setFloat("q2", state.q2);
       currState.setFloat("q1d", state.q1dot);
       currState.setFloat("q2d", state.q2dot);
-      currState.setFloat("velocity", (float)state.v);
+      currState.setFloat("velociy", (float)state.v);
       currState.setFloat("s", (float)state.s);
       currState.setFloat("velocity angle radians", (float)state.v_theta);
-      states.setJSONObject(i, currState);
+      array.setJSONObject(i, currState);
     }
 
-    saveJSONArray(states, fileName + ".json");
+    JSONObject settings = new JSONObject();
+    settings.setFloat("start q1", path.start.q1);
+    settings.setFloat("start q2", path.start.q2);
+    settings.setFloat("anchor1 q1", path.a1.q1);
+    settings.setFloat("anchor1 q2", path.a1.q2);
+    settings.setFloat("anchor2 q1", path.a2.q1);
+    settings.setFloat("anchor2 q2", path.a2.q2);
+    settings.setFloat("end q1", path.end.q1);
+    settings.setFloat("end q2", path.end.q2);
+    array.setJSONObject(points.size(), settings);
+    saveJSONArray(array, fileName + ".json");
   }
   public void show() {
     for (ArmState pt : points) {
@@ -503,7 +560,7 @@ class Trajectory {
         pt.show((float)pt.v + .2, color(0, 255, 0));
       }
 
-      arm.showEndEffector(pt, teal);
+      arm.showEndEffector(pt, color(255));
     }
   }
 }
@@ -610,7 +667,7 @@ public float toRadians(float degree) {
 }
 // called by toggle
 void show(boolean flag) {
-  showTraj = !flag;
+  showTraj = !showTraj;
 }
 
 void q1(String newValue) {
@@ -637,16 +694,54 @@ void q2b(String newValue) {
   end.q2 = toRadians(val);
 }
 
+void updatePathFromFile(File file) {
+  if (file == null) {
+    System.err.println("NULL FILE : User did not select a file.");
+  } else {
+    try {
+      // parse the settings of the path
+      JSONArray json = loadJSONArray(file);
+      JSONObject settings = json.getJSONObject(json.size() - 1);
+      path.start.q1 = settings.getFloat("start q1");
+      path.start.q2 = settings.getFloat("start q2");
+      path.a1.q1 = settings.getFloat("anchor1 q1");
+      path.a1.q2 = settings.getFloat("anchor1 q2");
+      path.a2.q1 = settings.getFloat("anchor2 q1");
+      path.a2.q2 = settings.getFloat("anchor2 q2");
+      path.end.q1 = settings.getFloat("end q1");
+      path.end.q2 = settings.getFloat("end q2");
+    }
+    catch(Exception e) {
+      // failed to load, dont update current path
+      return;
+    }
+  }
+}
+
+void load() {
+  selectInput("Select a path to modify", "updatePathFromFile");
+}
+
 void save() {
   String file = fileName.getText();
   if (file.contains(".")) return; // trying to save
   traj.save(file);
 }
 
+/** method to reverse the path */
+void reverse() {
+  // swap start and end
+  var pointer = path.start;
+  path.start = path.end;
+  path.end = pointer;
+  // swap anchor points
+  pointer = path.a1;
+  path.a1 = path.a2;
+  path.a2 = pointer;
+}
 void generate() {
   traj.parametrizeTrajectory();
 }
-
 
 //////////////////////////
 // Mouse functionality ///
@@ -654,21 +749,31 @@ void generate() {
 
 boolean draggingA = false;
 boolean draggingB = false;
+boolean draggingStart = false;
+boolean draggingEnd = false;
 
 void mousePressed() {
-  if (new ArmState(mouseX, mouseY).minus(path.a1.asPixel()).mag() <= 5.0) {
+  if (new ArmState(mouseX, mouseY).minus(path.a1.asPixel()).mag() <= 6.0) {
     draggingA = true;
-  } else if (new ArmState(mouseX, mouseY).minus(path.a2.asPixel()).mag() <= 5.0) {
+  } else if (new ArmState(mouseX, mouseY).minus(path.a2.asPixel()).mag() <= 6.0) {
     draggingB = true;
+  } else if (new ArmState(mouseX, mouseY).minus(path.start.asPixel()).mag() <= 6.0) {
+    draggingStart = true;
+  } else if (new ArmState(mouseX, mouseY).minus(path.end.asPixel()).mag() <= 6.0) {
+    draggingEnd = true;
   }
 }
 
 void mouseDragged() {
   if (draggingA) path.a1 = new ArmState(mouseX, mouseY).asPoint();
   else if (draggingB) path.a2 = new ArmState(mouseX, mouseY).asPoint();
+  else if (draggingStart) path.start = new ArmState(mouseX, mouseY).asPoint();
+  else if (draggingEnd) path.end = new ArmState(mouseX, mouseY).asPoint();
 }
 
 void mouseReleased() {
   draggingA = false;
   draggingB = false;
+  draggingStart = false;
+  draggingEnd = false;
 }
