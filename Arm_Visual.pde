@@ -1,6 +1,8 @@
 import controlP5.*;
 import java.util.*;
 
+// Bad regions
+List<ArmState> badPoints = new ArrayList<>();
 // UI objects
 ControlP5 cp5;
 Textfield fileName;
@@ -24,8 +26,8 @@ final float ROBOT_HEIGHT = .1048;
 final int TEAM_NUMBER = 449;
 
 // Arm
-final double L1 = .5;
-final double L2 = .4;
+final double L1 = .8;
+final double L2 = .8;
 Arm arm = new Arm(L1, L2);
 
 //////////////////////////// Colors
@@ -45,6 +47,8 @@ boolean showTraj = false;
 long startTime = System.currentTimeMillis();
 long prevTime = System.currentTimeMillis();
 // CONSTRAINTS
+double framePerimeter = 1.22;
+double heightLimit = 1.98; // meters
 double maxq1dot = 1.7; // rad/s
 double maxq2dot = 1.7; // rad/s
 double maxq1ddot = 1.5; // rad/s/s
@@ -52,7 +56,7 @@ double maxq2ddot = 1.5; // rad/s/s
 ////////////////////////////
 void setup() {
   fullScreen();
-  frameRate(160);
+  frameRate(240);
   // axis generation
   heightMeters = displayHeight * PIXEL_TO_METER;
   widthMeters = displayWidth * PIXEL_TO_METER;
@@ -177,6 +181,14 @@ void setup() {
 
   // add option to have a clear UI
   cp5.addTab("Clear UI");
+  
+  // add all points which violate constraints
+  for (double q1 = 0; q1 <= PI; q1 += .02) {
+    for (double q2 = -PI; q2 <= PI; q2 += .02) {
+      var state = new ArmState(q1, q2);
+      if (state.violatesConstraints()) badPoints.add(state);
+    }
+  }
 }
 ////////////////
 public void drawRobot() {
@@ -298,6 +310,7 @@ void draw() {
   drawRobot();
   // show the trajectory and path so that it can be modified
   if (showTraj) {
+    for (ArmState point : badPoints) point.show(1, red);
     path.showPath();
     traj.show();
     path.show();
@@ -648,7 +661,28 @@ class ArmState {
     ArmState center = this.asPixel();
     circle(center.q1, center.q2, radius);
   }
-
+  
+  public double getY() {
+    return L1 * sin(q1) + L2 * sin(q1 + q2);  
+  }
+  
+  public double getX() {
+    return L1 * cos(q1) + L2 * cos(q1 + q2);  
+  }
+  
+  public ArmState adjustQ1() {
+    q1 = Math.min(PI, Math.max(0.0, q1));
+    return this;
+  }
+  
+  public ArmState adjustQ2() {
+    q2 = Math.min(PI, Math.max(-PI, q2));
+    return this;
+  }
+  
+  public boolean violatesConstraints() {
+    return getY() < 0 || getY() > heightLimit;
+  }
   @Override
     public String toString() {
     return "(" + q1+ ", " + q2 + ")";
@@ -765,15 +799,15 @@ void mousePressed() {
 }
 
 void mouseDragged() {
-  if (draggingA) path.a1 = new ArmState(mouseX, mouseY).asPoint();
-  else if (draggingB) path.a2 = new ArmState(mouseX, mouseY).asPoint();
-  else if (draggingStart) path.start = new ArmState(mouseX, mouseY).asPoint();
-  else if (draggingEnd) path.end = new ArmState(mouseX, mouseY).asPoint();
+  if (draggingA) path.a1 = new ArmState(mouseX, mouseY).asPoint().adjustQ1().adjustQ2();
+  else if (draggingB) path.a2 = new ArmState(mouseX, mouseY).asPoint().adjustQ1().adjustQ2();
+  else if (draggingStart) path.start = new ArmState(mouseX, mouseY).asPoint().adjustQ1().adjustQ2();
+  else if (draggingEnd) path.end = new ArmState(mouseX, mouseY).asPoint().adjustQ1().adjustQ2();
 }
 
 void mouseReleased() {
   draggingA = false;
-  draggingB = false;
+  draggingB = false;  
   draggingStart = false;
   draggingEnd = false;
 }
