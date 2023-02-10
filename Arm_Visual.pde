@@ -1,8 +1,6 @@
 import controlP5.*;
 import java.util.*;
 
-// Bad regions
-List<ArmState> badPoints = new ArrayList<>();
 // UI objects
 ControlP5 cp5;
 Textfield fileName;
@@ -10,6 +8,13 @@ Textfield Q1D;
 Textfield Q2D;
 Textfield Q1DD;
 Textfield Q2DD;
+ScrollableList dropdownA;
+ScrollableList dropdownB;
+Textfield Q1;
+Textfield Q2;
+Textfield WAYPOINT_NAME;
+// Saved waypoints
+Map<String, ArmState> waypoints = new HashMap<>();
 // axis properties
 double heightMeters;
 double widthMeters;
@@ -22,12 +27,12 @@ final double PIXEL_TO_RAD = 1 / (1080/ (2 * PI));
 
 // Robot
 final float ROBOT_WIDTH = 0.8128; // the width of the robot to be drawn
-final float ROBOT_HEIGHT = .1048;
+final float ROBOT_HEIGHT = .0508;
 final int TEAM_NUMBER = 449;
 
 // Arm
-final double L1 = .8;
-final double L2 = .8;
+final double L1 = 0.8128;
+final double L2 = 0.9271;
 Arm arm = new Arm(L1, L2);
 
 //////////////////////////// Colors
@@ -47,16 +52,20 @@ boolean showTraj = false;
 long startTime = System.currentTimeMillis();
 long prevTime = System.currentTimeMillis();
 // CONSTRAINTS
-double framePerimeter = 1.22;
+double frameperim = 1.22; // meters
 double heightLimit = 1.98; // meters
 double maxq1dot = 1.7; // rad/s
 double maxq2dot = 1.7; // rad/s
 double maxq1ddot = 1.5; // rad/s/s
 double maxq2ddot = 1.5; // rad/s/s
 ////////////////////////////
+// Bad Points
+List<ArmState> badPoints = new ArrayList<>();
+
 void setup() {
   fullScreen();
-  frameRate(240);
+  frameRate(160);
+
   // axis generation
   heightMeters = displayHeight * PIXEL_TO_METER;
   widthMeters = displayWidth * PIXEL_TO_METER;
@@ -64,25 +73,26 @@ void setup() {
   widthRadians = displayWidth * PIXEL_TO_RAD;
   center = new Point(widthMeters / 2, heightMeters/2);
   origin = new ArmState(0.0, heightRadians/2);
+
   // path and trajectory initiation
   path = new Path(start, a1, a2, end);
   traj = new Trajectory(maxq1dot, maxq2dot, maxq1ddot, maxq2ddot, path);
-  // Start UI
+
+  // construct UI
   cp5 = new ControlP5(this);
 
   // Default tab to be renamed to trajectory tab instead
   cp5.getTab("default").setLabel("trajectory");
-  // switch for traj
+
+  // flip switch for traj
   cp5.addToggle("show")
     .setPosition(10, height - 40)
     .setSize(50, 20)
     .setValue(false)
     .setMode(ControlP5.SWITCH);
-  // save the trajectory to a file
-  // code here
 
+  // ****** text boxes for changing the constraints ******
 
-  // ****** text box for changing the constraints ******
   Q1D = cp5.addTextfield("max q1 vel")
     .setPosition(10, height - 80)
     .setSize(100, 20)
@@ -115,46 +125,61 @@ void setup() {
     .setAutoClear(false)
     .setInputFilter(2);
 
-  // ****** text box for point a ******
-  cp5.addTextfield("q2")
-    .setPosition(10, height - 40)
-    .setSize(100, 20)
-    .moveTo("Point A")
-    .setAutoClear(false)
-    .setInputFilter(3); // allow only floating point input
-
-  cp5.addTextfield("q1")
+  // Text boxes for adding/updating a point
+  Q1 = cp5.addTextfield("q1")
     .setPosition(10, height - 80)
     .setSize(100, 20)
-    .moveTo("Point A")
+    .moveTo("Points")
+    .setValue(path.start.q1 + "")
     .setAutoClear(false)
     .setInputFilter(3);
 
-  //****** text boxes for point b ******
-  cp5.addTextfield("q2b")
+  Q2 = cp5.addTextfield("q2")
     .setPosition(10, height - 40)
     .setSize(100, 20)
-    .moveTo("Point B")
-    .setLabel("q2 (B)")
+    .moveTo("Points")
+    .setValue(path.start.q2 + "")
     .setAutoClear(false)
     .setInputFilter(3);
 
-  cp5.addTextfield("q1b")
-    .setPosition(10, height - 80)
+  WAYPOINT_NAME = cp5.addTextfield("name")
+    .setPosition(120, height - 80)
     .setSize(100, 20)
-    .moveTo("Point B")
-    .setLabel("q1 (B)")
-    .setAutoClear(false)
-    .setInputFilter(3);
+    .setInputFilter(3)
+    .moveTo("Points");
 
-  /** File name field */
+  // Button to add/update a point
+  cp5.addBang("update")
+    .setPosition(120, height - 40)
+    .setSize(100, 20)
+    .setLabel("Add/update")
+    .align(ControlP5.CENTER, ControlP5.CENTER, ControlP5.CENTER, ControlP5.CENTER)
+    .moveTo("Points");
+
+  // ****** dropdown for point a ******
+  dropdownA = cp5.addScrollableList("A")
+    .setPosition(width - 230, 10)
+    .setSize(100, 100)
+    .setItemHeight(20)
+    .setType(ControlP5.DROPDOWN)
+    .setBarHeight(20);
+
+  // ****** dropdown for point b ******
+  dropdownB = cp5.addScrollableList("B")
+    .setPosition(width - 120, 10)
+    .setSize(100, 100)
+    .setItemHeight(20)
+    .setType(ControlP5.DROPDOWN)
+    .setBarHeight(20);
+
+  // file name field
   fileName = cp5.addTextfield("fileName")
     .setPosition(10, height - 80)
     .setSize(100, 20)
     .setLabel("Name")
     .setAutoClear(false)
     .setInputFilter(0);
-
+  
   // button to save to json file
   cp5.addBang("save")
     .setPosition(120, height - 80)
@@ -164,7 +189,8 @@ void setup() {
   // button to load a json file
   cp5.addBang("load")
     .setPosition(180, height - 40)
-    .setSize(50, 20)
+    .setSize(80, 20)
+    .setTriggerEvent(Bang.RELEASE)
     .align(ControlP5.CENTER, ControlP5.CENTER, ControlP5.CENTER, ControlP5.CENTER);
 
   cp5.addBang("reverse")
@@ -179,16 +205,18 @@ void setup() {
     .setLabel("Generate Trajectory")
     .align(ControlP5.CENTER, ControlP5.CENTER, ControlP5.CENTER, ControlP5.CENTER);
 
+  //  dropdown to choose start
   // add option to have a clear UI
   cp5.addTab("Clear UI");
   
-  // add all points which violate constraints
-  for (double q1 = 0; q1 <= PI; q1 += .02) {
-    for (double q2 = -PI; q2 <= PI; q2 += .02) {
-      var state = new ArmState(q1, q2);
-      if (state.violatesConstraints()) badPoints.add(state);
-    }
-  }
+  // Scan for bad points where the arm should not go
+  //for (float q1 = 0.0; q1 <= PI; q1 += .03) {
+  //  for (float q2 = -PI; q2 <= PI; q2 += .03) {
+  //    var state = new ArmState(q1, q2);
+  //    if (state.violatesConstraints()) badPoints.add(state);
+  //  }
+  //}
+  
 }
 ////////////////
 public void drawRobot() {
@@ -617,7 +645,19 @@ class ArmState {
   public double getAngle() {
     return atan2(q2, q1);
   }
-
+  
+  public double getY() {
+    return L1 * sin(q1) + L2 * sin(q1 + q2);  
+  }
+  
+  public double getX() {
+    return L1 * cos(q1) + L2 * cos(q1 + q2); 
+  }
+  
+  public boolean violatesConstraints() {
+    return true;  
+  }
+  
   public ArmState asPixel() {
     double pixelX = (q1 + origin.q1) / PIXEL_TO_RAD;
     double pixelY = (-q2 + origin.q2) / PIXEL_TO_RAD;
@@ -661,28 +701,7 @@ class ArmState {
     ArmState center = this.asPixel();
     circle(center.q1, center.q2, radius);
   }
-  
-  public double getY() {
-    return L1 * sin(q1) + L2 * sin(q1 + q2);  
-  }
-  
-  public double getX() {
-    return L1 * cos(q1) + L2 * cos(q1 + q2);  
-  }
-  
-  public ArmState adjustQ1() {
-    q1 = Math.min(PI, Math.max(0.0, q1));
-    return this;
-  }
-  
-  public ArmState adjustQ2() {
-    q2 = Math.min(PI, Math.max(-PI, q2));
-    return this;
-  }
-  
-  public boolean violatesConstraints() {
-    return getY() < 0 || getY() > heightLimit;
-  }
+
   @Override
     public String toString() {
     return "(" + q1+ ", " + q2 + ")";
@@ -690,42 +709,47 @@ class ArmState {
 }
 
 // UTIL FUNCTIONS
-public ArmState fromDegrees(double theta, double beta) {
-  theta = theta * PI / 180;
-  beta = beta * PI / 180;
-  return new ArmState(theta, beta);
+public ArmState fromDegrees(float theta, float beta) {
+  return new ArmState(toRadians(theta), toRadians(beta));
 }
 
 public float toRadians(float degree) {
   return degree * PI / 180;
 }
+
 // called by toggle
 void show(boolean flag) {
-  showTraj = !showTraj;
+  showTraj = !flag;
 }
 
-void q1(String newValue) {
-  float val = (float)Double.parseDouble(newValue);
-  val = Math.min(Math.max(0, val), 180);
-  start.q1 = toRadians(val);
+// add/update the list of waypoints saved
+void update() {
+  try {
+    var q1 = Float.parseFloat(Q1.getText());
+    var q2 = Float.parseFloat(Q2.getText());
+    var name = WAYPOINT_NAME.getText();
+    if (name.equals("")) return;
+    ArmState pt = fromDegrees(q1, q2);
+    waypoints.putIfAbsent(name, pt);
+    waypoints.replace(name, pt);
+    dropdownA.removeItem(name);
+    dropdownB.removeItem(name);
+    dropdownA.addItem(name, pt);
+    dropdownB.addItem(name, pt);
+  }
+  catch(Exception e) {
+    System.err.println("ERROR: Values entered were not numbers.");
+  }
 }
 
-void q2(String newValue) {
-  float val = (float)Double.parseDouble(newValue);
-  val = Math.min(Math.max(-180, val), 180);
-  start.q2 = toRadians(val);
+void A(int n) {
+  var item = dropdownA.getItem(n);
+  path.start = waypoints.get(item.get("name"));
 }
 
-void q1b(String newValue) {
-  float val = (float)Double.parseDouble(newValue);
-  val = Math.min(Math.max(0, val), 180);
-  end.q1 = toRadians(val);
-}
-
-void q2b(String newValue) {
-  float val = (float)Double.parseDouble(newValue);
-  val = Math.min(Math.max(-180, val), 180);
-  end.q2 = toRadians(val);
+void B(int n) {
+  var item = dropdownB.getItem(n);
+  path.end = waypoints.get(item.get("name"));
 }
 
 void updatePathFromFile(File file) {
@@ -773,6 +797,7 @@ void reverse() {
   path.a1 = path.a2;
   path.a2 = pointer;
 }
+
 void generate() {
   traj.parametrizeTrajectory();
 }
@@ -799,15 +824,15 @@ void mousePressed() {
 }
 
 void mouseDragged() {
-  if (draggingA) path.a1 = new ArmState(mouseX, mouseY).asPoint().adjustQ1().adjustQ2();
-  else if (draggingB) path.a2 = new ArmState(mouseX, mouseY).asPoint().adjustQ1().adjustQ2();
-  else if (draggingStart) path.start = new ArmState(mouseX, mouseY).asPoint().adjustQ1().adjustQ2();
-  else if (draggingEnd) path.end = new ArmState(mouseX, mouseY).asPoint().adjustQ1().adjustQ2();
+  if (draggingA) path.a1 = new ArmState(mouseX, mouseY).asPoint();
+  else if (draggingB) path.a2 = new ArmState(mouseX, mouseY).asPoint();
+  else if (draggingStart) path.start = new ArmState(mouseX, mouseY).asPoint();
+  else if (draggingEnd) path.end = new ArmState(mouseX, mouseY).asPoint();
 }
 
 void mouseReleased() {
   draggingA = false;
-  draggingB = false;  
+  draggingB = false;
   draggingStart = false;
   draggingEnd = false;
 }
