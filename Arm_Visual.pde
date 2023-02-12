@@ -513,9 +513,9 @@ class Trajectory {
       ArmState currPt = points.get(i);
       ArmState prevPt = points.get(i-1);
       double ds = Math.abs(currPt.s - prevPt.s);
-      double q1dot = Math.abs((Math.cos(currPt.v_theta)));
-      double q2dot = Math.abs((Math.sin(currPt.v_theta)));
-      double maxA = (q1dot * maxq1ddot + q2dot * maxq2ddot);
+      double ctheta = Math.abs((Math.cos(currPt.v_theta)));
+      double stheta = Math.abs((Math.sin(currPt.v_theta)));
+      double maxA = (ctheta * maxq1ddot + stheta * maxq2ddot);
       double vi = prevPt.v;
       if (Math.sqrt(vi * vi + 2.0 * maxA * ds) <= currPt.v) currPt.step = 2;
       double vf = Math.min(currPt.v, Math.sqrt(vi * vi + 2.0 * maxA * ds));
@@ -529,9 +529,9 @@ class Trajectory {
       ArmState currPt = points.get(i);
       ArmState prevPt = points.get(i+1);
       double ds = Math.abs(currPt.s - prevPt.s);
-      double q1dot = Math.abs((Math.cos(currPt.v_theta)));
-      double q2dot = Math.abs((Math.sin(currPt.v_theta)));
-      double maxA = (q1dot * maxq1ddot + q2dot * maxq2ddot);
+      double ctheta = Math.abs((Math.cos(currPt.v_theta)));
+      double stheta = Math.abs((Math.sin(currPt.v_theta)));
+      double maxA = (ctheta * maxq1ddot + stheta * maxq2ddot);
       double vi = prevPt.v;
       if (Math.sqrt(vi * vi + 2.0 * maxA * ds) <= currPt.v) currPt.step = 3;
       double vf = Math.min(currPt.v, Math.sqrt(vi * vi + 2.0 * maxA * ds));
