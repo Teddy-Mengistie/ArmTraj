@@ -26,14 +26,17 @@ final float PIXEL_TO_METER = 1 / 200.0; // 1 meter per 200 pixels, 1 pixel = 1/2
 final double PIXEL_TO_RAD = 1 / (1080/ (2 * PI));
 
 // Robot
-final float ROBOT_WIDTH = 0.8128; // the width of the robot to be drawn
-final float ROBOT_HEIGHT = .0508;
+final float ROBOT_WIDTH = 0.762 + 2 * 0.08255; // the width of the robot to be drawn
+final float ROBOT_HEIGHT = 0.127;
 final int TEAM_NUMBER = 449;
-
+final float WHEEL_RADIUS = 0.0508 / PIXEL_TO_METER;
 // Arm
 final double L1 = 0.8128;
 final double L2 = 0.9271;
 Arm arm = new Arm(L1, L2);
+final double distFromBase = 0.117475; // m
+final double distFromCenter = ROBOT_WIDTH / 2.0 - 0.1524; // m
+Point armRoot = new Point(-distFromCenter, distFromBase);
 
 //////////////////////////// Colors
 int red = color(255, 0, 0);
@@ -54,10 +57,10 @@ long prevTime = System.currentTimeMillis();
 // CONSTRAINTS
 double frameperim = 1.22; // meters
 double heightLimit = 1.98; // meters
-double maxq1dot = 1.7; // rad/s
-double maxq2dot = 1.7; // rad/s
-double maxq1ddot = 1.5; // rad/s/s
-double maxq2ddot = 1.5; // rad/s/s
+double maxq1dot = 5.0; // rad/s
+double maxq2dot = 5.0; // rad/s
+double maxq1ddot = 4.0; // rad/s/s
+double maxq2ddot = 4.0; // rad/s/s
 ////////////////////////////
 // Bad Points
 List<ArmState> badPoints = new ArrayList<>();
@@ -220,11 +223,17 @@ void setup() {
 }
 ////////////////
 public void drawRobot() {
+  noFill();
+  Point topLeft = new Point(-heightLimit, heightLimit - 0.04064 - ROBOT_HEIGHT);
+  Point topRight = new Point(heightLimit, heightLimit - 0.04064 - ROBOT_HEIGHT);
+  topLeft.lineTo(topRight);
+  
   Point corner1 = new Point(-ROBOT_WIDTH / 2, 0.0).asPixel();
   fill(red);
-  rect(corner1.x, corner1.y, ROBOT_WIDTH / PIXEL_TO_METER, ROBOT_HEIGHT / PIXEL_TO_METER, 5.0);
+  rect(corner1.x, corner1.y, ROBOT_WIDTH / PIXEL_TO_METER, ROBOT_HEIGHT / PIXEL_TO_METER, 7.0);
   fill(255);
 }
+
 class Point {
   float x; // x coordinate meters or pixels
   float y; // y coordinate meters or pixels
@@ -311,7 +320,7 @@ class Arm {
     double s1 = Math.sin(state.q1);
     double c12 = Math.cos(state.q1 + state.q2);
     double s12 = Math.sin(state.q1 + state.q2);
-    new Point(l1 * c1 + l2 * c12, l1 * s1 + l2 * s12).show(2, col);
+    new Point(l1 * c1 + l2 * c12, l1 * s1 + l2 * s12).plus(armRoot).show(2, col);
   }
 
   // Show the arm using some geometry (forward kinematics)
@@ -320,13 +329,13 @@ class Arm {
     double s1 = Math.sin(currentState.q1);
     double c12 = Math.cos(currentState.q1 + currentState.q2);
     double s12 = Math.sin(currentState.q1 + currentState.q2);
-    Point endEffector = new Point(l1 * c1 + l2 * c12, l1 * s1 + l2 * s12);
-    Point joint = new Point(l1 * c1, l1 * s1);
-    new Point(0, 0).lineTo(joint);
+    Point endEffector = new Point(l1 * c1 + l2 * c12, l1 * s1 + l2 * s12).plus(armRoot);
+    Point joint = new Point(l1 * c1, l1 * s1).plus(armRoot);
+    armRoot.lineTo(joint);
     joint.lineTo(endEffector);
     endEffector.show(10, red);
     joint.show(10, red);
-    new Point(0, 0).show(20, green);
+    armRoot.show(20, green);
   }
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -461,7 +470,7 @@ class Trajectory {
   public void parametrizeTrajectory() {
 
     // collect samples from path to use for generating trajectory
-    points = path.collectSamples(2000);
+    points = path.collectSamples(1000);
 
     try {
       updateConstraints();
@@ -553,9 +562,10 @@ class Trajectory {
   }
 
   public void save(String fileName) {
-
+    JSONObject object = new JSONObject();
+    
+    // gather points into array
     JSONArray array = new JSONArray();
-
     for (int i = 0; i < points.size(); i++) {
       JSONObject currState = new JSONObject();
       ArmState state = points.get(i);
@@ -564,23 +574,24 @@ class Trajectory {
       currState.setFloat("q2", state.q2);
       currState.setFloat("q1d", state.q1dot);
       currState.setFloat("q2d", state.q2dot);
-      currState.setFloat("velociy", (float)state.v);
-      currState.setFloat("s", (float)state.s);
-      currState.setFloat("velocity angle radians", (float)state.v_theta);
       array.setJSONObject(i, currState);
     }
+    object.setJSONArray("states", array);
 
-    JSONObject settings = new JSONObject();
-    settings.setFloat("start q1", path.start.q1);
-    settings.setFloat("start q2", path.start.q2);
-    settings.setFloat("anchor1 q1", path.a1.q1);
-    settings.setFloat("anchor1 q2", path.a1.q2);
-    settings.setFloat("anchor2 q1", path.a2.q1);
-    settings.setFloat("anchor2 q2", path.a2.q2);
-    settings.setFloat("end q1", path.end.q1);
-    settings.setFloat("end q2", path.end.q2);
-    array.setJSONObject(points.size(), settings);
-    saveJSONArray(array, fileName + ".json");
+    // save info about this path for reverse engineering
+    JSONObject metadata = new JSONObject();
+    metadata.setFloat("start q1", path.start.q1);
+    metadata.setFloat("start q2", path.start.q2);
+    metadata.setFloat("anchor1 q1", path.a1.q1);
+    metadata.setFloat("anchor1 q2", path.a1.q2);
+    metadata.setFloat("anchor2 q1", path.a2.q1);
+    metadata.setFloat("anchor2 q2", path.a2.q2);
+    metadata.setFloat("end q1", path.end.q1);
+    metadata.setFloat("end q2", path.end.q2);
+    object.setJSONObject("metadata", metadata);
+    
+    // save to filename.json
+    saveJSONObject(object, fileName + ".json");
   }
   public void show() {
     for (ArmState pt : points) {
@@ -758,16 +769,16 @@ void updatePathFromFile(File file) {
   } else {
     try {
       // parse the settings of the path
-      JSONArray json = loadJSONArray(file);
-      JSONObject settings = json.getJSONObject(json.size() - 1);
-      path.start.q1 = settings.getFloat("start q1");
-      path.start.q2 = settings.getFloat("start q2");
-      path.a1.q1 = settings.getFloat("anchor1 q1");
-      path.a1.q2 = settings.getFloat("anchor1 q2");
-      path.a2.q1 = settings.getFloat("anchor2 q1");
-      path.a2.q2 = settings.getFloat("anchor2 q2");
-      path.end.q1 = settings.getFloat("end q1");
-      path.end.q2 = settings.getFloat("end q2");
+      JSONObject json = loadJSONObject(file);
+      JSONObject metadata = json.getJSONObject("metadata");
+      path.start.q1 = metadata.getFloat("start q1");
+      path.start.q2 = metadata.getFloat("start q2");
+      path.a1.q1 = metadata.getFloat("anchor1 q1");
+      path.a1.q2 = metadata.getFloat("anchor1 q2");
+      path.a2.q1 = metadata.getFloat("anchor2 q1");
+      path.a2.q2 = metadata.getFloat("anchor2 q2");
+      path.end.q1 = metadata.getFloat("end q1");
+      path.end.q2 = metadata.getFloat("end q2");
     }
     catch(Exception e) {
       // failed to load, dont update current path
