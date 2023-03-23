@@ -32,7 +32,7 @@ final int TEAM_NUMBER = 449;
 final float WHEEL_RADIUS = 0.0508 / PIXEL_TO_METER;
 // Arm
 final double L1 = 0.8128;
-final double L2 = 0.9271;
+final double L2 = 0.8636;
 Arm arm = new Arm(L1, L2);
 final double distFromBase = 0.117475; // m
 final double distFromCenter = ROBOT_WIDTH / 2.0 - 0.1524; // m
@@ -57,10 +57,10 @@ long prevTime = System.currentTimeMillis();
 // CONSTRAINTS
 double frameperim = 1.22; // meters
 double heightLimit = 1.98; // meters
-double maxq1dot = 5.0; // rad/s
-double maxq2dot = 5.0; // rad/s
-double maxq1ddot = 4.0; // rad/s/s
-double maxq2ddot = 4.0; // rad/s/s
+double maxq1dot = 6.0; // rad/s
+double maxq2dot = 6.0; // rad/s
+double maxq1ddot = 5.0; // rad/s/s
+double maxq2ddot = 5.0; // rad/s/s
 ////////////////////////////
 // Bad Points
 List<ArmState> badPoints = new ArrayList<>();
@@ -779,6 +779,7 @@ void updatePathFromFile(File file) {
       path.a2.q2 = metadata.getFloat("anchor2 q2");
       path.end.q1 = metadata.getFloat("end q1");
       path.end.q2 = metadata.getFloat("end q2");
+      fileName.setText(file.getName().replace(".json", ""));
     }
     catch(Exception e) {
       // failed to load, dont update current path
